@@ -1,0 +1,610 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Survival Aleks20x - Laser Edition</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select: none;">
+<style>
+    body { margin:0; padding:0; background:#000; overflow:hidden; font-family: 'Courier New', Courier, monospace; color:#fff; user-select: none; touch-action: none; -webkit-tap-highlight-color: transparent; }
+#canvas {
+    position: fixed; /* Troque absolute por fixed para evitar scrolls fantasmas */
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    display: block;
+}
+#top-bar { position: absolute; top: 0; left: 0; width: 100%; display: none; flex-wrap: wrap; justify-content: space-between; align-items: center; padding: 8px; box-sizing: border-box; background: rgba(0,0,0,0.6); z-index: 999; pointer-events: auto; }
+    .ui-btn { padding: 8px 10px; background: #111; border: 1px solid #555; color: #fff; border-radius: 4px; cursor: pointer; font-size: 10px; font-weight: bold; text-transform: uppercase; }
+    #hud { position: absolute; top: 75px; left: 15px; z-index: 10; pointer-events: none; text-shadow: 2px 2px 4px #000; }
+    .overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.95); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 1000; text-align: center; }
+    #guide-box { width: 85%; max-width: 500px; max-height: 65vh; overflow-y: auto; background: #111; border: 1px solid #444; padding: 15px; border-radius: 10px; text-align: left; margin-bottom: 10px; }
+    .guide-section { margin-bottom: 15px; font-size: 12px; }
+    .guide-tag { color: #ff0; font-weight: bold; }
+    .main-btn { padding: 15px 30px; background: #fff; color: #000; border: none; border-radius: 50px; font-weight: bold; margin: 10px; cursor: pointer; width: 220px; font-size: 14px; }
+    #upgrade-bar { position: absolute; bottom: 15px; left: 50%; transform: translateX(-50%); display: none; gap: 5px; z-index: 100; width: 95%; justify-content: center; flex-wrap: wrap; }
+    .upgrade-item { background: rgba(15, 15, 15, 0.95); border: 1px solid #444; padding: 10px 5px; border-radius: 8px; flex: 1; text-align: center; min-width: 70px; cursor: pointer; font-size: 10px; }
+.boss-glow {
+    /* Define a animação: nome (rgbLoop), duração (3s), infinita e linear */
+    animation: rgbLoop 3s linear infinite;
+    font-weight: bold;
+}
+
+@keyframes rgbLoop {
+    0%   { color: #ff0000; text-shadow: 0 0 10px #ff0000; } /* Vermelho */
+    20%  { color: #ff00ff; text-shadow: 0 0 10px #ff00ff; } /* Magenta */
+    40%  { color: #0000ff; text-shadow: 0 0 10px #0000ff; } /* Azul */
+    60%  { color: #00ffff; text-shadow: 0 0 10px #00ffff; } /* Ciano */
+    80%  { color: #00ff00; text-shadow: 0 0 10px #00ff00; } /* Verde */
+    100% { color: #ff0000; text-shadow: 0 0 10px #ff0000; } /* Volta ao Vermelho */
+}
+/* Estilo base (Geral / Retrato) */
+#game-logs {
+    position: absolute;
+    top: 160px; /* Abaixo do HUD em pé */
+    left: 15px;
+    pointer-events: none;
+    z-index: 20;
+    max-width: 200px;
+}
+
+/* Ajuste para telas deitadas (Landscape) */
+@media (orientation: landscape) {
+    #game-over-screen h1 {
+        font-size: 24px; /* Diminui o título para sobrar espaço */
+        margin-top: 10px;
+    }
+    
+    #game-logs {
+        top: 10px;        /* Sobe o log para o topo */
+        left: auto;       
+        right: 15px;      /* Joga para o lado direito */
+        text-align: right; 
+    }
+    
+    #final-stats {
+        font-size: 14px; /* Ajusta o tamanho dos números */
+        display: flex;
+        gap: 20px; /* Coloca as stats lado a lado se houver espaço */
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .main-btn {
+        padding: 10px 20px; /* Botões um pouco menores */
+        width: 180px;
+    }
+}
+</style>
+</head>
+<body>
+    <div id="game-logs"></div>
+    <div id="damage-overlay"></div>
+    <canvas id="canvas"></canvas>
+   
+    <div id="top-bar">
+        <div class="button-group-left">
+            <button class="ui-btn" onclick="toggleAutoShield()">.ESCUDO.</button>
+            <button class="ui-btn" onclick="optimizePerformance()">.OTiMiZAR.</button>
+        </div>
+        <div class="button-group-right">
+            <button id="pause-btn" class="ui-btn" onclick="togglePause()">[P]</button>
+        </div>
+    </div>
+
+    <div id="hud">
+        <div id="player-lvl-tag">LVL 0</div>
+        <div id="stage-display">STAGE 0</div>
+        <div id="stats-display">SCORE: 0 | HP: 100</div>
+    </div>
+
+    <div id="upgrade-bar">
+        <div class="upgrade-item" onclick="buyUpgrade('damage')">DANO: <span id="lvl-damage">0</span><br><span id="price-damage">$100</span></div>
+        <div class="upgrade-item" onclick="buyUpgrade('attack_speed')">FREQ: <span id="lvl-attack_speed">0</span><br><span id="price-attack_speed">$100</span></div>
+        <div class="upgrade-item" onclick="buyUpgrade('lifesteal')">VAMP: <span id="lvl-lifesteal">0</span><br><span id="price-lifesteal">$100</span></div>
+        <div class="upgrade-item" onclick="buyUpgrade('multishot')">FEiXE: <span id="lvl-multishot">0</span><br><span id="price-multishot">$100</span></div>
+    </div>
+
+    <div id="start-screen" class="overlay">
+        <h1>CORE BREACH <span class="boss-glow">LASER</span></h1>
+        <button class="main-btn" onclick="startGame()">.iNiCiAR.</button>
+        <button class="main-btn" style="background:transparent; border:1px solid #fff; color:#fff;" onclick="toggleGuide()">.GUiA.</button>
+    </div>
+   
+    <div id="game-over-screen" class="overlay" style="display:none;">
+    <h1 style="color: #f44;">SISTEMA COMPROMETIDO</h1>
+    <div id="final-stats" style="margin-bottom: 20px; font-size: 18px; line-height: 1.6;">
+        </div>
+    <button class="main-btn" onclick="backToMenu()">.TELA iNiCiAL.</button>
+</div>
+
+    <div id="guide-modal" class="overlay" style="display:none;">
+        <div id="guide-box">
+            <h2>.MODO LASER ATUALIZADO.</h2>
+            <div class="guide-section
+                <p><span class="guide-tag">⚔️ UPGRADES:</span></p>
+                <ul>
+                    <li><b>DANO:</b> Potência de queima do laser.</li>
+                    <li><b>FREQ:</b> Rapidez com que o laser processa o dano (Flash por segundo).</li>
+                    <li><b>VAMP:</b> Roubo de Hp aumemta a regeneração do Hp.</li>
+                    <li><b>FEIXE:</b> Quantidade de inimigos atingidos ao mesmo tempo.</li>
+                </ul>
+            </div>
+        </div>
+        <button class="main-btn" onclick="toggleGuide()">.FECHAR.</button>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const STATES = { START: 'start', ACTIVE: 'active', PAUSED: 'paused', OVER: 'over' };
+        let state = STATES.START;
+       
+        const INITIAL_HP = 100;
+        let player = { x: 0, y: 0, radius: 15, hp: INITIAL_HP, globalLevel: 0, hitTimer: 0 };
+        let enemies = [], particles = [];
+let score = 0, totalScore = 0, kills = 0, stage = 0;
+let lastLoggedStage = -1; // Começa em -1 para logar o Estágio 0
+let startTime = 0, pauseOffset = 0, lastPauseTime = 0, lastSpawnTime = 0;
+let shieldActive = false, lastShieldUse = 0, autoShield = true;
+        const shieldDuration = 3000, shieldCooldown = 50, shieldRadius = 100;
+
+let upgrades = {
+    damage: 2,
+    attack_speed: 200,
+    lifesteal: 0.2,
+    multishot: 1,
+    bounces: 0 //(acerta o alvo e tenta pular para +1)
+};
+        let levels = { damage: 0, attack_speed: 0, lifesteal: 0, multishot: 0 };
+        let lastLaserTick = 0;
+       
+        function addLog(text, color = "#0ff") {
+    const container = document.getElementById('game-logs');
+    const log = document.createElement('div');
+    log.className = 'log-entry';
+    log.style.borderLeftColor = color;
+    log.innerHTML = text;
+    container.appendChild(log);
+   
+    // Remove do HTML depois que a animação acaba
+    setTimeout(() => log.remove(), 3000);
+}
+
+        function toggleGuide() {
+            const modal = document.getElementById('guide-modal');
+            modal.style.display = modal.style.display === 'none' ? 'flex' : 'none';
+        }
+       
+function resetGame() {
+    state = STATES.START;
+    player.hp = INITIAL_HP;
+    player.globalLevel = 0;
+    score = 0;
+    kills = 0;
+    enemies = [];
+    particles = [];
+    stage = 0;
+    lastLoggedStage = -1;
+
+    // Reseta os níveis de compra
+    levels = { damage: 0, attack_speed: 0, lifesteal: 0, multishot: 0 };
+
+    // Reseta os status reais (Incluindo o bounces aqui dentro!)
+    upgrades = {
+        damage: 2,
+        attack_speed: 200,
+        lifesteal: 0.2,
+        multishot: 1,
+        bounces: 0
+    };
+   
+    // Atualiza a interface
+    document.getElementById('lvl-damage').innerText = "0";
+    document.getElementById('lvl-attack_speed').innerText = "0";
+    document.getElementById('lvl-lifesteal').innerText = "0";
+    document.getElementById('lvl-multishot').innerText = "0";
+    document.getElementById('price-damage').innerText = "$100";
+    document.getElementById('price-attack_speed').innerText = "$100";
+    document.getElementById('price-lifesteal').innerText = "$100";
+    document.getElementById('price-multishot').innerText = "$100";
+
+    document.getElementById('start-screen').style.display = 'flex';
+    document.getElementById('top-bar').style.display = 'none';
+    document.getElementById('upgrade-bar').style.display = 'none';
+}
+
+        function createExplosion(x, y, color, count) {
+            for(let i=0; i<count; i++) {
+                particles.push({ x, y, vx: (Math.random()-0.5)*3, vy: (Math.random()-0.5)*3, life: 1.0, color });
+            }
+        }
+
+        function spawnEnemy(m) {
+    if (enemies.length > 50) return;
+    let progressFactor = stage <= 20 ? m : Math.pow(1.5, 20) + (stage - 20) * 0.5;
+   
+    const margin = 50; // Margem de segurança fora da tela
+    const side = Math.floor(Math.random() * 4);
+    let x, y;
+
+    if (side === 0) { x = Math.random() * canvas.width; y = -margin; }
+    else if (side === 1) { x = Math.random() * canvas.width; y = canvas.height + margin; }
+    else if (side === 2) { x = -margin; y = Math.random() * canvas.height; }
+    else { x = canvas.width + margin; y = Math.random() * canvas.height; }
+   
+            let r = Math.random();
+            let color = '#f44'; shadowBlur = 20; hp = (5 * progressFactor), dmg = (0.4 * progressFactor), speed = 2.0 + (stage * 0.05), radius = 15, isShooter = false;
+            if(r > 0.8) { color = '#44f'; shadowBlur = 20; hp *= 1.5; radius = 10; isShooter = true; }
+            else if(r > 0.6) { color = '#0f0'; shadowBlur = 20; hp *= 3; radius = 20; speed *= 0.8; }
+            enemies.push({ x, y, hp, maxHp: hp, dmg, color, radius, speed, isShooter, isBoss: false, shadowBlur });
+        }
+
+        function loop(now) {
+    if (state !== STATES.ACTIVE) return;
+
+    // Ajuste de DPI/Resize
+    if (canvas.width !== window.innerWidth || canvas.height !== window.innerHeight) {
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight;
+    }
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Lógica de tempo e Estágios
+    let gameTime = Math.floor((now - startTime - pauseOffset) / 1000);
+    stage = Math.floor(gameTime / 60);
+
+    // Sistema de Logs de Estágio
+    if (stage > lastLoggedStage) {
+        let bonusAtual = 50 + (Math.floor(stage / 10) * 50);
+        addLog(`<b>ESTÁGIO ${stage}</b><br>Recompensa: $${bonusAtual} por abate`, "#0f0");
+        lastLoggedStage = stage;
+    }
+
+    let m = Math.pow(1.5, stage);
+
+    // Spawn de inimigos
+    if (now - lastSpawnTime > 800) {
+        spawnEnemy(m);
+        lastSpawnTime = now;
+    }
+   
+    // ... (restante do código do escudo, partículas e player continua igual)
+           
+            if (autoShield && (now - lastShieldUse > (shieldDuration + shieldCooldown))) {
+                shieldActive = true;
+                lastShieldUse = now;
+            }
+            if (shieldActive && (now - lastShieldUse > shieldDuration)) shieldActive = false;
+
+            if (shieldActive) {
+    ctx.save();
+
+    // 1. CÁLCULO DA OPACIDADE SUAVE (FADE IN / FADE OUT)
+    // Calcula quanto tempo passou desde que o escudo ligou (0 a 3000ms)
+    let elapsed = now - lastShieldUse;
+    // Transforma isso em um valor de 0 a 1 (progresso)
+    let progress = elapsed / shieldDuration;
+    // Usa o Seno para criar uma curva suave: sobe e desce
+    // Math.sin(0) é 0, Math.sin(PI/2) é 1, Math.sin(PI) é 0
+    let shieldOpacity = Math.sin(progress * Math.PI);
+
+    // 2. Camada de Brilho Externo (A aura do escudo)
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, shieldRadius, 0, Math.PI * 2);
+    // Aplicamos a opacidade calculada aqui
+    ctx.strokeStyle = `rgba(0, 255, 255, ${0.3 * shieldOpacity})`;
+    ctx.lineWidth = 6;
+    ctx.shadowBlur = (80 + Math.sin(now / 600) * 10) * shieldOpacity;
+    ctx.shadowColor = "#0ff";
+    ctx.stroke();
+
+    // 3. Camada do Núcleo (A linha branca central)
+    ctx.beginPath();
+    ctx.arc(player.x, player.y, shieldRadius, 0, Math.PI * 2);
+    // A linha branca também fica transparente conforme o tempo acaba
+    ctx.strokeStyle = `rgba(255, 255, 255, ${shieldOpacity})`;
+    ctx.lineWidth = 2;
+    ctx.shadowBlur = (20 + Math.sin(now / 300) * 10) * shieldOpacity;
+    ctx.stroke();
+
+    // 4. Preenchimento Interno
+    ctx.fillStyle = `rgba(0, 255, 255, ${0.08 * shieldOpacity})`;
+    ctx.fill();
+
+    ctx.restore();
+}
+
+            for(let i=particles.length-1; i>=0; i--) {
+                let p = particles[i]; p.x += p.vx; p.y += p.vy; p.life -= 0.04;
+                if(p.life <= 0) { particles.splice(i, 1); continue; }
+                ctx.globalAlpha = p.life; ctx.fillStyle = p.color;
+                ctx.fillRect(p.x, p.y, 2, 2);
+            }
+            ctx.globalAlpha = 1.0;
+
+            ctx.save(); // Salva o estado
+
+// 1. Cria o Gradiente Radial (o "efeito de luz")
+// O gradiente vai do centro do player (player.x, player.y) até o dobro do raio dele.
+let innerRadius = 0;
+let outerRadius = player.radius * 2.5; // Tamanho da Aura
+let glow = ctx.createRadialGradient(player.x, player.y, innerRadius, player.x, player.y, outerRadius);
+
+// Configuração das camadas de cor:
+// A cor base da luz depende se o player está piscando (vermelho) ou normal.
+let baseGlow = player.hitTimer > 0 ? "rgba(255, 0, 0, 0.9)" : "rgba(0, 255, 255, 0.8)"; // Vermelho ou Ciano
+
+// Adiciona as "paradas" de cor (layers):
+glow.addColorStop(0, "white");     // Camada 1: O núcleo é branco intenso
+glow.addColorStop(0.5, baseGlow);    // Camada 2: Cor base da aura perto do núcleo
+glow.addColorStop(1, "transparent"); // Camada 3: Transparente na borda externa (aura suave)
+
+// 2. Desenha a Aura de Luz (Atrás do Player)
+ctx.fillStyle = glow;
+ctx.beginPath();
+ctx.arc(player.x, player.y, outerRadius, 0, Math.PI * 2);
+ctx.fill();
+
+// 3. Desenha o Player (O círculo sólido na frente)
+ctx.fillStyle = player.hitTimer > 0 ? "red" : "white";
+if(player.hitTimer > 0) player.hitTimer--; // Diminui o tempo do hit
+ctx.beginPath();
+ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
+ctx.fill();
+
+ctx.restore(); // Reseta o estado
+
+            if (enemies.length > 0 && now - lastLaserTick > upgrades.attack_speed) {
+    // Pega os alvos iniciais baseados no seu upgrade de MULTISHOT
+let targets = [...enemies]
+    .filter(e => Math.hypot(player.x - e.x, player.y - e.y) < 350) // ADICIONE ESTA LINHA
+    .sort((a,b) => Math.hypot(player.x-a.x, player.y-a.y) - Math.hypot(player.x-b.x, player.y-b.y))
+    .slice(0, upgrades.multishot);
+    targets.forEach(mainTarget => {
+        let currentSource = { x: player.x, y: player.y };
+        let hitEnemies = new Set(); // Para não pular no mesmo inimigo duas vezes
+        let bounceCount = 0;
+        let currentTarget = mainTarget;
+
+        while (currentTarget && bounceCount <= upgrades.bounces) {
+            // Desenha o Laser
+            ctx.save();
+            ctx.strokeStyle = "white";
+            ctx.lineWidth = Math.max(1, 3 - bounceCount); // O laser vai ficando fino a cada pulo
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = "cyan";
+            ctx.beginPath();
+            ctx.moveTo(currentSource.x, currentSource.y);
+            ctx.lineTo(currentTarget.x, currentTarget.y);
+            ctx.stroke();
+            ctx.restore();
+
+            // Aplica dano e efeito
+            currentTarget.hp -= upgrades.damage;
+            createExplosion(currentTarget.x, currentTarget.y, "white", 1);
+            hitEnemies.add(currentTarget);
+
+            // Procura o PRÓXIMO inimigo mais próximo deste que acabou de ser atingido
+            currentSource = { x: currentTarget.x, y: currentTarget.y };
+            bounceCount++;
+
+            // Busca o vizinho mais próximo que ainda não foi atingido nesta corrente
+            currentTarget = enemies
+                .filter(e => !hitEnemies.has(e))
+                .sort((a, b) => Math.hypot(currentSource.x - a.x, currentSource.y - a.y) - Math.hypot(currentSource.x - b.x, currentSource.y - b.y))[0];
+           
+            // Se o próximo estiver longe demais, a corrente quebra (opcional)
+            if (currentTarget && Math.hypot(currentSource.x - currentTarget.x, currentSource.y - currentTarget.y) > 350) {
+                currentTarget = null;
+            }
+        }
+    });
+    lastLaserTick = now;
+}
+
+            for(let i=enemies.length-1; i>=0; i--) {
+                let e = enemies[i];
+                let d = Math.hypot(player.x-e.x, player.y-e.y);
+                let ang = Math.atan2(player.y-e.y, player.x-e.x);
+
+                if (shieldActive && d < shieldRadius + e.radius) {
+                    e.x = player.x - Math.cos(ang) * (shieldRadius + e.radius);
+                    e.y = player.y - Math.sin(ang) * (shieldRadius + e.radius);
+                    e.hp -= (upgrades.damage * 0.5);
+                    if(Math.random() > 0.9) createExplosion(e.x, e.y, "#0ff", 1);
+                } else {
+                    e.x += Math.cos(ang) * e.speed;
+                    e.y += Math.sin(ang) * e.speed;
+                }
+
+                if(e.isShooter && d < 350) {
+                    let targetX = player.x;
+                    let targetY = player.y;
+                    let takesDamage = true;
+                    if (shieldActive) {
+                        takesDamage = false;
+                        targetX = player.x - Math.cos(ang) * shieldRadius;
+                        targetY = player.y - Math.sin(ang) * shieldRadius;
+                        if(Math.random() > 0.7) createExplosion(targetX, targetY, "#0ff", 1);
+                    }
+                    ctx.save();
+                    ctx.strokeStyle = e.color;
+                    ctx.lineWidth = 2;
+ctx.shadowBlur = 10;
+                    ctx.shadowColor = e.color;
+                    ctx.globalAlpha = 0.6;
+                    ctx.beginPath(); ctx.moveTo(e.x, e.y); ctx.lineTo(targetX, targetY); ctx.stroke();
+                    ctx.restore();
+                   
+                    if(takesDamage) {
+                        player.hp -= (e.dmg * 0.10);
+                        player.hitTimer = 5; // Pisca em vermelho
+                        if(Math.random() > 0.8) createExplosion(player.x, player.y, "red", 1);
+                    }
+                }
+
+                ctx.save(); // Salva para o brilho de um inimigo não "vazar" para o outro
+ctx.strokeStyle = e.color;
+ctx.lineWidth = 2;
+
+// Aqui usamos o valor que você guardou no spawnEnemy!
+ctx.shadowBlur = e.shadowBlur;
+ctx.shadowColor = e.color;
+
+ctx.beginPath();
+ctx.arc(e.x, e.y, e.radius, 0, Math.PI*2);
+ctx.stroke();
+ctx.restore(); // Limpa o estado para o próximo desenho
+
+                if (d < player.radius + e.radius) {
+                    player.hp -= e.dmg * 10; player.hitTimer = 5;
+                    enemies.splice(i, 1);
+                } else if (e.hp <= 0) {
+    // Calcula o bônus: Cada 10 estágios completos aumentam 50 pontos.
+    // Stage 0-9: 50 | Stage 10-19: 100 | Stage 20-29: 150 ...
+    let stageBonus = 50 + (Math.floor(stage / 10) * 50);
+   
+    score += stageBonus;
+    totalScore += stageBonus;
+    kills++;
+                    createExplosion(e.x, e.y, e.color, 2);
+                    enemies.splice(i, 1);
+                    player.hp += upgrades.lifesteal;
+                }
+            }
+
+            document.getElementById('stats-display').innerText = `SCORE: ${Math.floor(score)} | HP: ${Math.floor(player.hp)}`;
+            document.getElementById('player-lvl-tag').innerText = `LVL ${player.globalLevel}`;
+            document.getElementById('stage-display').innerText = `STAGE ${stage}`;
+           
+            if(player.hp <= 0) {
+    showGameOver();
+} else {
+    requestAnimationFrame(loop);
+}
+}
+
+function buyUpgrade(type) {
+    // 1. TRAVAS DE SEGURANÇA (Impede a compra se atingir o limite)
+    if (type === 'attack_speed' && upgrades.attack_speed <= 40) return;
+    if (type === 'multishot' && levels.multishot >= 50) return; // Nova trava para 50 feixes
+
+    let cost = (levels[type] + 1) * 100;
+
+    if (score >= cost) {
+        score -= cost;
+        levels[type]++;
+        player.globalLevel++;
+
+        // Sistema de bônus por nível global (Ricochete)
+        if (player.globalLevel % 10 === 0) {
+            upgrades.bounces += 1;
+            addLog(`<b>+1 RICOCHETE!</b> (Total: ${upgrades.bounces})`, "#ff0");
+        }
+
+        // 2. APLICAÇÃO DOS UPGRADES
+        if(type === 'damage') upgrades.damage += 2;
+       
+        if(type === 'attack_speed') {
+            upgrades.attack_speed = Math.max(40, upgrades.attack_speed - 4);
+        }
+       
+        if(type === 'lifesteal') upgrades.lifesteal += 0.2;
+       
+        if(type === 'multishot') upgrades.multishot += 1;
+       
+        // 3. ATUALIZAÇÃO DA INTERFACE (UI)
+        document.getElementById(`lvl-${type}`).innerText = levels[type];
+       
+        // Atualiza preços ou mostra "MAX"
+        if (type === 'attack_speed' && upgrades.attack_speed <= 40) {
+            document.getElementById(`price-attack_speed`).innerText = "MAX";
+        } else if (type === 'multishot' && levels.multishot >= 50) {
+            document.getElementById(`price-multishot`).innerText = "MAX";
+        } else {
+            // Só atualiza o preço se não estiver no MAX
+            document.getElementById(`price-${type}`).innerText = `$${(levels[type]+1)*100}`;
+        }
+    }
+}
+
+        function startGame() {
+            state = STATES.ACTIVE;
+            startTime = performance.now();
+            pauseOffset = 0;
+            document.getElementById('start-screen').style.display = 'none';
+            document.getElementById('top-bar').style.display = 'flex';
+            document.getElementById('upgrade-bar').style.display = 'flex';
+            requestAnimationFrame(loop);
+        }
+
+function resizeCanvas() {
+    // 1. Ajusta o tamanho INTERNO do canvas para a resolução real da tela
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+    
+    // 2. Garante que o CSS acompanhe (evita o efeito oval/esticado)
+    canvas.style.width = window.innerWidth + 'px';
+    canvas.style.height = window.innerHeight + 'px';
+    
+    // 3. Recentraliza o player
+    player.x = canvas.width / 2;
+    player.y = canvas.height / 2;
+
+    // 4. Limpa detritos que poderiam bugar na nova proporção
+    enemies = [];
+    particles = [];
+}
+
+// Escuta a mudança de tamanho e rotação
+window.addEventListener('resize', resizeCanvas);
+
+// Executa uma vez no início para configurar
+resizeCanvas();
+
+        function togglePause() {
+            if (state === STATES.ACTIVE) { state = STATES.PAUSED; document.getElementById('pause-btn').innerText = "[RESUME]"; }
+            else { state = STATES.ACTIVE; document.getElementById('pause-btn').innerText = "[P]"; requestAnimationFrame(loop); }
+        }
+       
+        function optimizePerformance() {
+            enemies = [];
+            particles = [];
+        }
+
+        function toggleAutoShield() {
+            autoShield = !autoShield;
+            event.target.style.borderColor = autoShield ? "#fff" : "#f44";
+        }
+       
+        function showGameOver() {
+    state = STATES.OVER;
+   
+    // Esconde as barras de jogo
+    document.getElementById('top-bar').style.display = 'none';
+    document.getElementById('upgrade-bar').style.display = 'none';
+   
+    // Preenche as estatísticas
+    const statsBox = document.getElementById('final-stats');
+    statsBox.innerHTML = `
+        ESTÁGIO ALCANÇADO: <span style="color:#0ff">${stage}</span><br>
+        PONTUAÇÃO TOTAL: <span style="color:#0ff">${Math.floor(totalScore)}</span><br>
+        ABATES: <span style="color:#0ff">${kills}</span>
+    `;
+   
+    // Mostra a tela
+    document.getElementById('game-over-screen').style.display = 'flex';
+}
+
+function backToMenu() {
+    // Esconde a tela de Game Over
+    document.getElementById('game-over-screen').style.display = 'none';
+   
+    // Chama o seu resetGame que já limpa os status e mostra a tela de start
+    resetGame();
+}
+    </script>
+</body>
+</html>
