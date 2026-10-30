@@ -5,20 +5,58 @@
     <title>Survival Aleks20x - Laser Edition</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-select: none;">
 <style>
-    body { margin:0; padding:0; background:#000; overflow:hidden; font-family: 'Courier New', Courier, monospace; color:#fff; user-select: none; touch-action: none; -webkit-tap-highlight-color: transparent; }
-#canvas {
-    position: fixed; /* Troque absolute por fixed para evitar scrolls fantasmas */
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    display: block;
-}
+    * { box-sizing: border-box; }
+    html, body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: #000;
+    }
+    body {
+        padding: 0;
+        background: #000;
+        font-family: 'Courier New', Courier, monospace;
+        color: #fff;
+        user-select: none;
+        touch-action: none;
+        -webkit-tap-highlight-color: transparent;
+        display: grid;
+        place-items: center;
+    }
+    .game-frame {
+        position: relative;
+        width: min(90vw, 50.625vh);
+        aspect-ratio: 9 / 16;
+        max-height: 90vh;
+        overflow: hidden;
+        background: #000;
+        border: 1px solid #292929;
+        box-shadow: 0 0 28px rgba(0, 0, 0, 0.85);
+    }
+    .game-stage {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 360px;
+        height: 640px;
+        transform-origin: top left;
+        overflow: hidden;
+        background: #000;
+    }
+    #canvas {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 360px;
+        height: 640px;
+        display: block;
+    }
 #top-bar { position: absolute; top: 0; left: 0; width: 100%; display: none; flex-wrap: wrap; justify-content: space-between; align-items: center; padding: 8px; box-sizing: border-box; background: rgba(0,0,0,0.6); z-index: 999; pointer-events: auto; }
     .ui-btn { padding: 8px 10px; background: #111; border: 1px solid #555; color: #fff; border-radius: 4px; cursor: pointer; font-size: 10px; font-weight: bold; text-transform: uppercase; }
     #hud { position: absolute; top: 75px; left: 15px; z-index: 10; pointer-events: none; text-shadow: 2px 2px 4px #000; }
-    .overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.95); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 1000; text-align: center; }
-    #guide-box { width: 85%; max-width: 500px; max-height: 65vh; overflow-y: auto; background: #111; border: 1px solid #444; padding: 15px; border-radius: 10px; text-align: left; margin-bottom: 10px; }
+    .overlay { position: absolute; top: 0; left: 0; width: 360px; height: 640px; background: rgba(0,0,0,0.95); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 1000; text-align: center; }
+    #guide-box { width: 85%; max-width: 500px; max-height: 65%; overflow-y: auto; background: #111; border: 1px solid #444; padding: 15px; border-radius: 10px; text-align: left; margin-bottom: 10px; }
     .guide-section { margin-bottom: 15px; font-size: 12px; }
     .guide-tag { color: #ff0; font-weight: bold; }
     .main-btn { padding: 15px 30px; background: #fff; color: #000; border: none; border-radius: 50px; font-weight: bold; margin: 10px; cursor: pointer; width: 220px; font-size: 14px; }
@@ -48,36 +86,12 @@
     max-width: 200px;
 }
 
-/* Ajuste para telas deitadas (Landscape) */
-@media (orientation: landscape) {
-    #game-over-screen h1 {
-        font-size: 24px; /* Diminui o título para sobrar espaço */
-        margin-top: 10px;
-    }
-    
-    #game-logs {
-        top: 10px;        /* Sobe o log para o topo */
-        left: auto;       
-        right: 15px;      /* Joga para o lado direito */
-        text-align: right; 
-    }
-    
-    #final-stats {
-        font-size: 14px; /* Ajusta o tamanho dos números */
-        display: flex;
-        gap: 20px; /* Coloca as stats lado a lado se houver espaço */
-        flex-wrap: wrap;
-        justify-content: center;
-    }
 
-    .main-btn {
-        padding: 10px 20px; /* Botões um pouco menores */
-        width: 180px;
-    }
-}
 </style>
 </head>
 <body>
+    <div class="game-frame">
+      <div class="game-stage" id="game-stage">
     <div id="game-logs"></div>
     <div id="damage-overlay"></div>
     <canvas id="canvas"></canvas>
@@ -121,7 +135,7 @@
     <div id="guide-modal" class="overlay" style="display:none;">
         <div id="guide-box">
             <h2>.MODO LASER ATUALIZADO.</h2>
-            <div class="guide-section
+            <div class="guide-section">
                 <p><span class="guide-tag">⚔️ UPGRADES:</span></p>
                 <ul>
                     <li><b>DANO:</b> Potência de queima do laser.</li>
@@ -138,13 +152,17 @@
     </div>
 
     <script>
+        const LOGICAL_WIDTH = 360;
+        const LOGICAL_HEIGHT = 640;
         const canvas = document.getElementById('canvas');
         const ctx = canvas.getContext('2d');
+        const gameFrame = document.querySelector('.game-frame');
+        const gameStage = document.getElementById('game-stage');
         const STATES = { START: 'start', ACTIVE: 'active', PAUSED: 'paused', OVER: 'over' };
         let state = STATES.START;
        
         const INITIAL_HP = 100;
-        let player = { x: 0, y: 0, radius: 15, hp: INITIAL_HP, globalLevel: 0, hitTimer: 0 };
+        let player = { x: LOGICAL_WIDTH / 2, y: LOGICAL_HEIGHT / 2, radius: 15, hp: INITIAL_HP, globalLevel: 0, hitTimer: 0 };
         let enemies = [], particles = [];
 let score = 0, totalScore = 0, kills = 0, stage = 0;
 let lastLoggedStage = -1; // Começa em -1 para logar o Estágio 0
@@ -161,6 +179,39 @@ let upgrades = {
 };
         let levels = { damage: 0, attack_speed: 0, lifesteal: 0, multishot: 0 };
         let lastLaserTick = 0;
+        const LASER_BEAM_DURATION = 220;
+        let laserBeams = [];
+        let pauseStartedAt = 0;
+        let animationFrameId = null;
+
+        function scheduleLoop() {
+            if (state === STATES.ACTIVE && animationFrameId === null) {
+                animationFrameId = requestAnimationFrame(loop);
+            }
+        }
+
+        function drawLaserBeams(now) {
+            for (let i = laserBeams.length - 1; i >= 0; i--) {
+                const beam = laserBeams[i];
+                const remaining = beam.expiresAt - now;
+                if (remaining <= 0) {
+                    laserBeams.splice(i, 1);
+                    continue;
+                }
+                const fade = Math.min(1, remaining / LASER_BEAM_DURATION);
+                ctx.save();
+                ctx.globalAlpha = 0.25 + fade * 0.75;
+                ctx.strokeStyle = '#ffffff';
+                ctx.lineWidth = beam.width;
+                ctx.shadowBlur = 12;
+                ctx.shadowColor = '#00ffff';
+                ctx.beginPath();
+                ctx.moveTo(beam.x1, beam.y1);
+                ctx.lineTo(beam.x2, beam.y2);
+                ctx.stroke();
+                ctx.restore();
+            }
+        }
        
         function addLog(text, color = "#0ff") {
     const container = document.getElementById('game-logs');
@@ -187,8 +238,16 @@ function resetGame() {
     kills = 0;
     enemies = [];
     particles = [];
+    laserBeams = [];
     stage = 0;
     lastLoggedStage = -1;
+    startTime = 0;
+    pauseOffset = 0;
+    pauseStartedAt = 0;
+    lastSpawnTime = 0;
+    lastLaserTick = 0;
+    player.x = LOGICAL_WIDTH / 2;
+    player.y = LOGICAL_HEIGHT / 2;
 
     // Reseta os níveis de compra
     levels = { damage: 0, attack_speed: 0, lifesteal: 0, multishot: 0 };
@@ -237,22 +296,23 @@ function resetGame() {
     else { x = canvas.width + margin; y = Math.random() * canvas.height; }
    
             let r = Math.random();
-            let color = '#f44'; shadowBlur = 20; hp = (5 * progressFactor), dmg = (0.4 * progressFactor), speed = 2.0 + (stage * 0.05), radius = 15, isShooter = false;
+            let color = '#f44';
+            let shadowBlur = 20;
+            let hp = 5 * progressFactor;
+            let dmg = 0.4 * progressFactor;
+            let speed = 2.0 + (stage * 0.05);
+            let radius = 15;
+            let isShooter = false;
             if(r > 0.8) { color = '#44f'; shadowBlur = 20; hp *= 1.5; radius = 10; isShooter = true; }
             else if(r > 0.6) { color = '#0f0'; shadowBlur = 20; hp *= 3; radius = 20; speed *= 0.8; }
             enemies.push({ x, y, hp, maxHp: hp, dmg, color, radius, speed, isShooter, isBoss: false, shadowBlur });
         }
 
         function loop(now) {
+    animationFrameId = null;
     if (state !== STATES.ACTIVE) return;
 
-    // Ajuste de DPI/Resize
-    if (canvas.width !== window.innerWidth || canvas.height !== window.innerHeight) {
-        canvas.width = window.innerWidth;
-        canvas.height = window.innerHeight;
-    }
-
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.clearRect(0, 0, LOGICAL_WIDTH, LOGICAL_HEIGHT);
 
     // Lógica de tempo e Estágios
     let gameTime = Math.floor((now - startTime - pauseOffset) / 1000);
@@ -372,17 +432,15 @@ let targets = [...enemies]
         let currentTarget = mainTarget;
 
         while (currentTarget && bounceCount <= upgrades.bounces) {
-            // Desenha o Laser
-            ctx.save();
-            ctx.strokeStyle = "white";
-            ctx.lineWidth = Math.max(1, 3 - bounceCount); // O laser vai ficando fino a cada pulo
-            ctx.shadowBlur = 10;
-            ctx.shadowColor = "cyan";
-            ctx.beginPath();
-            ctx.moveTo(currentSource.x, currentSource.y);
-            ctx.lineTo(currentTarget.x, currentTarget.y);
-            ctx.stroke();
-            ctx.restore();
+            // Guarda o feixe para continuar desenhando nos próximos quadros.
+            laserBeams.push({
+                x1: currentSource.x,
+                y1: currentSource.y,
+                x2: currentTarget.x,
+                y2: currentTarget.y,
+                width: Math.max(1, 3 - bounceCount),
+                expiresAt: now + LASER_BEAM_DURATION
+            });
 
             // Aplica dano e efeito
             currentTarget.hp -= upgrades.damage;
@@ -406,6 +464,8 @@ let targets = [...enemies]
     });
     lastLaserTick = now;
 }
+
+            drawLaserBeams(now);
 
             for(let i=enemies.length-1; i>=0; i--) {
                 let e = enemies[i];
@@ -482,10 +542,10 @@ ctx.restore(); // Limpa o estado para o próximo desenho
             document.getElementById('player-lvl-tag').innerText = `LVL ${player.globalLevel}`;
             document.getElementById('stage-display').innerText = `STAGE ${stage}`;
            
-            if(player.hp <= 0) {
+            if (player.hp <= 0) {
     showGameOver();
 } else {
-    requestAnimationFrame(loop);
+    scheduleLoop();
 }
 }
 
@@ -537,44 +597,66 @@ function buyUpgrade(type) {
             state = STATES.ACTIVE;
             startTime = performance.now();
             pauseOffset = 0;
+            pauseStartedAt = 0;
+            lastSpawnTime = startTime;
+            lastLaserTick = 0;
+            laserBeams = [];
             document.getElementById('start-screen').style.display = 'none';
             document.getElementById('top-bar').style.display = 'flex';
             document.getElementById('upgrade-bar').style.display = 'flex';
-            requestAnimationFrame(loop);
+            scheduleLoop();
         }
 
-function resizeCanvas() {
-    // 1. Ajusta o tamanho INTERNO do canvas para a resolução real da tela
-    canvas.width = window.innerWidth;
-    canvas.height = window.innerHeight;
-    
-    // 2. Garante que o CSS acompanhe (evita o efeito oval/esticado)
-    canvas.style.width = window.innerWidth + 'px';
-    canvas.style.height = window.innerHeight + 'px';
-    
-    // 3. Recentraliza o player
-    player.x = canvas.width / 2;
-    player.y = canvas.height / 2;
-
-    // 4. Limpa detritos que poderiam bugar na nova proporção
-    enemies = [];
-    particles = [];
+function resizeGameFrame() {
+    // Só muda a escala visual; o mundo interno continua em 360x640.
+    const scale = Math.min(
+        gameFrame.clientWidth / LOGICAL_WIDTH,
+        gameFrame.clientHeight / LOGICAL_HEIGHT
+    );
+    gameStage.style.transform = `scale(${scale})`;
 }
 
-// Escuta a mudança de tamanho e rotação
-window.addEventListener('resize', resizeCanvas);
+function resizeCanvas() {
+    canvas.width = LOGICAL_WIDTH;
+    canvas.height = LOGICAL_HEIGHT;
+    player.x = LOGICAL_WIDTH / 2;
+    player.y = LOGICAL_HEIGHT / 2;
+    resizeGameFrame();
+}
 
-// Executa uma vez no início para configurar
+window.addEventListener('resize', resizeGameFrame);
 resizeCanvas();
 
         function togglePause() {
-            if (state === STATES.ACTIVE) { state = STATES.PAUSED; document.getElementById('pause-btn').innerText = "[RESUME]"; }
-            else { state = STATES.ACTIVE; document.getElementById('pause-btn').innerText = "[P]"; requestAnimationFrame(loop); }
-        }
+    if (state === STATES.ACTIVE) {
+        state = STATES.PAUSED;
+        pauseStartedAt = performance.now();
+        document.getElementById('pause-btn').innerText = "[RESUME]";
+        return;
+    }
+
+    if (state === STATES.PAUSED) {
+        const now = performance.now();
+        const pausedFor = pauseStartedAt ? now - pauseStartedAt : 0;
+        pauseOffset += pausedFor;
+        lastSpawnTime += pausedFor;
+        lastLaserTick += pausedFor;
+        lastShieldUse += pausedFor;
+        laserBeams.forEach(beam => {
+            beam.expiresAt += pausedFor;
+        });
+
+        pauseStartedAt = 0;
+        state = STATES.ACTIVE;
+        document.getElementById('pause-btn').innerText = "[P]";
+        scheduleLoop();
+    }
+}
        
         function optimizePerformance() {
             enemies = [];
             particles = [];
+            laserBeams = [];
         }
 
         function toggleAutoShield() {
@@ -584,6 +666,7 @@ resizeCanvas();
        
         function showGameOver() {
     state = STATES.OVER;
+    laserBeams = [];
    
     // Esconde as barras de jogo
     document.getElementById('top-bar').style.display = 'none';
@@ -609,5 +692,7 @@ function backToMenu() {
     resetGame();
 }
     </script>
+      </div>
+    </div>
 </body>
 </html>
